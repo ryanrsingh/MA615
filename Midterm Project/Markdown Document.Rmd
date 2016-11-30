@@ -1,0 +1,166 @@
+---
+title: "Midterm Project"
+author: "Ryan Ranjiv Singh"
+date: "October 26, 2016"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Midterm Project
+This midterm project explores the fuel economy data, which are the results of vehicle testing done at the Environmental Protection Agency's National Vehicle and Fuel Emissions Laboratory in Ann Arbor, Michigan, and by vehicle manufacturers with oversight by EPA. This includes data on all vehicle types tested, for all models and during the years (1984–2017).
+
+The raw dataset has many unnecessary columns and data that was not part of my analysis, as I chose to work specifically on single fuel typed vehicles. With the tidied up data, I further analyzed the data through various visualizations and also attempted regressions to create a model that could predict the fuel usage per year for a car.
+
+```{r vehicles}
+vehicles = read.csv("vehicles.csv")
+summary(vehicles$barrels08)
+summary(vehicles$city08)
+```
+These summary codes shown above display some information about the range of the data recorded in the respective variable names. Only 2 of the many variables are displayed here, as there are too many variables to display all summaries here.
+
+##Tidying Data and Preparation for Analysis
+```{r}
+library(tidyr)
+library(dtplyr)
+library(ggplot2)
+```
+
+Reading the data and beginning the tidying process, after loading the respective libraries
+
+```{r}
+vehicles = read.csv("vehicles.csv")
+names(vehicles)[c(0:10,73:83)]
+```
+
+Preliminary observation of column names identify 5 unnecessary columns of data for inital analysis: (createdon; modifiedon;startStop; phevCity; phevHwy; phevComb). As such, the following code deletes these 5 columns.
+
+```{r}
+base1 <- vehicles[c(1:77,81:83)]
+```
+
+Without these columns, we can now proceed to filter the remaining columns to eliminate any other data points that capture information about dual fuel type vehicles.
+
+```{r}
+#Filter 1 removes datalines that have any annual fuel consumption in terms of the second fuel type.
+filter1 <- subset(base1, barrelsA08 < 0.0001)
+
+#Filter 2 & 3 ensure that datalines for both cityA08 and cityA08U, and for both co2A and co2TailpipeAGpm, there is no consumption of the fuel type 2.
+filter2 <- subset(filter1, cityA08 < 0.0001| cityA08U < 0.0001)
+filter3<- subset(filter2, co2A <0 | co2TailpipeAGpm < 0.0001)
+
+#Removing other unnecessary columns (7,8,13,14,18,19,30,37,38,55,57,60,62)
+base2 <- filter3[,-c(7,8,13:14,18:19,30,37:38,55,57,60,62)]
+```
+
+Now that the data is tidied up, we can save the new tables as a new CSV file, called TidyData.csv.
+
+```{r}
+TidyData <- base2
+write.csv(TidyData, 'TidyData.csv')
+```
+
+##Data Visualization
+Now that we have completed the tidy data procedure, we can now load in the new dataset, called TidyData, which we will use to formulate plots and also regressions.
+```{r}
+newbase <- read.csv('TidyData.csv')
+```
+
+### Exploring Relationships
+
+1. Relationship between Cylinders of a car and its Annual Fuel Cost
+
+```{r}
+newbase$fuelCost08 <- as.integer(newbase$fuelCost08)
+CYL <- newbase$cylinders
+AFC <- newbase$fuelCost08
+plot.1 <- qplot(CYL, AFC, 
+     main = "Relationship between Cylinders and Annual Fuel Cost", 
+     xlab ="Cylinders", ylab = "Annual Fuel Cost")
+model.1 <- lm(AFC ~ CYL)
+coef(model.1)
+plot.2 <- plot.1 + geom_abline(intercept=coef(model.1)[1],
+                     slope=coef(model.1)[2])
+suppressWarnings(print(plot.2))
+```
+
+From this plot, we can see the individual dot plots of cars with their respective cylinders and what their annual fuel cost looks like. The line going through the plot is the simple linear regression model of cylinders regressed against annual fuel cost. This shows a general linear relationship between the 2 factors identified. 
+
+2. Relationship between Make and Annual Fuel Cost
+```{r}
+newbase$Make <- as.character(newbase$fuelCost08)
+MAKE <- newbase$make
+AFC <- newbase$fuelCost08
+plot.2 <- qplot(MAKE, AFC, 
+     main = "Relationship between Make and Annual Fuel Cost", 
+     xlab ="Make", ylab = "Annual Fuel Cost")
+model.2 <- lm(MAKE ~ CYL)
+coef(model.2)
+plot.3 <- plot.2 + geom_abline(intercept=coef(model.2)[1],
+                     slope=coef(model.2)[2])
+suppressWarnings(print(plot.3))
+```
+From this plot, we can see that it is a really dense plot of all the cars recorded in the dataset.
+We can reduce the number of Makes represented in the plot, to really analyze specifically a brand of car, as well as further break it down into the individual models of each brand.
+
+These analyses can be done simply by creating smaller datasets based on the make, and then using q plot to plot the graphs again.
+
+3. Attempt to cross validate and model Annual Fuel Cost to predictive variables
+
+Split data set into 2, one for formulation of regression, the other to test. (50% of the sample size)
+
+```{r}
+smp_size <- floor(0.50 * nrow(base2))
+```
+
+Set the seed to make your partition reproductible
+
+```{r}
+set.seed(123)
+ind <- sample(seq_len(nrow(base2)), size = smp_size)
+
+train <- base2[ind, ]
+test <- base2[-ind, ]
+```
+
+Regress the training set
+
+```{r}
+LM1 <- lm(fuelCost08 ~ barrels08+city08+city08U+comb08+comb08U+cylinders
+          +displ+drive+make+trany+year+co2+co2TailpipeGpm+highway08+highway08U
+          +UCity+UHighway,data = train)
+ss <- coef(summary(LM1))
+ss_sign <- ss[ss[,"Pr(>|t|)"]<0.05,]
+printCoefmat(ss_sign)
+```
+
+
+From the summary, we can see that the significant variables in the multiple linear regression are:barrels08, city08, city08U, comb08, comb08U, cylinders, displ, drive, make, year, co2TailpipeGpm, highway08, highway08U, UCity.
+
+```{r}
+LM2 <- lm(fuelCost08 ~ barrels08+city08+city08U+comb08+comb08U+cylinders+displ+drive
++make+year+co2TailpipeGpm+highway08+highway08U+UCity, data= train)
+#predict(LM2, test)
+#(HELPPP)
+```
+Here, I attempt to test the regression on the test set of the data, however I am unable to do so, as there are under-represented factor levels in Make that were not accounted for in the initial regression model.
+This means that I have to figure out a way to ensure that the sampling done initially accounts for all the different factor levels for this method to work.
+
+
+4. Creating a regression based on the whole dataset
+```{r}
+LMfull <- lm(fuelCost08 ~ barrels08+city08+city08U+comb08+comb08U+cylinders+displ+drive+make
+             +trany+year+co2+co2TailpipeGpm+highway08+highway08U+UCity+UHighway,data = base2)
+ssF <- coef(summary(LMfull))
+ssF_sign <- ssF[ssF[,"Pr(>|t|)"]<0.05,]
+printCoefmat(ssF_sign)
+```
+
+
+This offers a different model based on the entirety of the dataset produced, as compared to taking a sample of the original data, running a regression and testing it with another version.To note, catergorical variables in the regression model will have one or more levels less than the dataset, as the regression method utilizes one of the levels as a reference point.
+
+
+## Summary
+There are a lot of things that can be done further with the data that I have not included here, as I was unable to get them to work fully. However, I am interested in delving further into model building and predictive analysis. I hope to encounter datasets that interest me more and motivate me to delve deeper into them.
