@@ -1,0 +1,115 @@
+---
+title: "SQL Report"
+author: "Ryan Ranjiv Singh"
+date: "December 4, 2016"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+## Library Initialization
+
+```{r}
+library(RPostgreSQL)
+library(ggplot2)
+```
+
+## Initialization Code
+
+```{r}
+host <- "analyticsga-east2.c20gkj5cvu3l.us-east-1.rds.amazonaws.com"
+port <- "5432"
+username <- "analytics_student"
+password <- "analyticsga"
+## Use the name of the specific database you will access
+dbname <- "iowa_liquor_sales_database"
+## Specify the PostreSQL driver
+drv <- dbDriver("PostgreSQL")
+## Now establish the connection
+con <- dbConnect(drv, user = username, password = password, dbname = dbname, port = port, host = host)
+
+
+#Run this to test connection
+dbListTables(con)
+dbListFields(con, "products")
+
+
+r1 <- dbGetQuery(con, statement = paste(
+  "SELECT DISTINCT category_name, cast(proof as integer)",
+  "FROM products",
+  "WHERE cast(proof as integer) >= 85 and category_name is not null"))
+
+#to see what r1 is
+str(r1) 
+
+
+#Exploring case cost
+r3 <- dbGetQuery(con, statement = paste(
+  "SELECT case_cost",
+  "FROM products"))
+
+```
+
+## Analysis
+
+```{r}
+
+qplot(r3$case_cost)
+hist(r3$case_cost)
+
+r4 <- r3$case_cost[!is.na(r3$case_cost)]
+
+mean(r4)
+median(r4)
+var(r4)
+
+```
+
+Looking at the dot chart and the histogram, we can see that most of the data is clustered under 3000, leading to an assumption that the data point above 3000 are outliers.
+
+As such, we should remove those data points.
+```{r}
+filter1 <- subset(r3, case_cost < 3000)
+qplot(filter1)
+```
+
+##Analysis 2
+
+Now I attempt to run a regression using the variables. However, I need to change the class types for certain variables, and also remove unwanted characters like '$' from the bottle price column.
+
+The regression conducted will not include the names of the vendor or category, as that generates too many individual levels that complicates the simple regression. Variable selection methods will have to be conducted in order to better analyze the effect of the vendor/category on the regression.
+
+```{r}
+r2 <- dbGetQuery(con, statement = paste(
+  "SELECT category_name, vendor_name, bottle_size, pack, inner_pack, proof, bottle_price, shelf_price, case_cost",
+  "FROM products"))
+
+r2$proof <- as.integer(r2$proof)
+r2$bottle_price <- sub('.','', r2$bottle_price)
+r2$bottle_price <- as.numeric(r2$bottle_price)
+
+reg1 <- lm(r2$case_cost ~ r2$bottle_size + r2$pack + r2$inner_pack + r2$proof + r2$bottle_price + r2$shelf_price)
+summary(reg1)
+
+layout(matrix(c(1,2,3,4),2,2)) # optional 4 graphs/page 
+plot(reg1)
+```
+From this regression analysis, it seems like every factor is strongly correlated to the case cost variable, with bottle price having the largest p value. However, the p value is still <0.05.
+
+I will attempt to remove the factor bottle price, since its p value was the lowest, and also has the 'common sense' relationship, as the case cost should be derived from number of bottles in case * bottle price.
+
+```{r}
+reg2 <- lm(r2$case_cost ~ r2$bottle_size + r2$pack + r2$inner_pack + r2$proof + r2$shelf_price)
+summary(reg2)
+
+layout(matrix(c(1,2,3,4),2,2)) # optional 4 graphs/page 
+plot(reg2)
+```
+The summary shows that all the remaining factors are significant, as demonstrated in the first regression. The p values of bottle size, inner pack and shelf price all became significantly smaller, as a result of removing bottle price. This suggests that there may have been some correlation between case cost and bottle price.
+
+```{r}
+cor.test(r2$case_cost, r2$bottle_price)
+```
+The correlation test shows that my suspicion is true. Almost 60% of the variation in case cost is represented by bottle price, and since the t value is large, p value is small, we reject the null hypothesis, and can conclude that there is correlation between the variables.
+
