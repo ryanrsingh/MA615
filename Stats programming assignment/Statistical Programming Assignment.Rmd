@@ -1,0 +1,143 @@
+---
+title: "Statisical Programming Assignment"
+author: "Ryan Ranjiv Singh"
+date: "November 3, 2016"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+##1. Summing Distributions and Testing for Normality
+
+This program will serve to sum up distributions, specifically binomial, and then explore how many distributions can be summed before the tests for Normality passes. This is because the binomial distribution is one of the simpler distributions and are easier to sum.
+
+I will specifically use the Shapiro test to conduct these tests.
+
+##Code:
+```{r}
+bin_test <- function(num){
+  x = rbinom(num, n = num, prob = 0.99)
+  
+  t=0
+  hist(x)
+  
+  while (t<0.2){
+    x = x + rbinom(num, n = num, prob = 0.99)
+    k = shapiro.test(x)
+    t = k$p.value #to store the p values from the test summary
+  }
+  par (mfrow=c(1,2))
+  hist(x)  
+  print(qqnorm(x))  
+  qqline(x, col = 2)  
+}
+```
+
+We will attempt to combine 20 binomial observations. 
+
+```{r}
+bin_test(20)
+```
+
+We will now try 50 observations.
+
+```{r}
+bin_test(50)
+```
+
+We will also try 100 observations.
+
+```{r}
+bin_test(100)
+```
+
+Let's also try 500 and 1000 observations.
+
+```{r}
+bin_test(500)
+
+bin_test(1000)
+```
+
+Small note: I am unsure how exactly to ensure the plots do not end up outside of the paper margins. The par(mfrow) method worked until the larger distribution (100,500) summations. Would be nice to know how to ensure it is always in line.
+
+
+##2. Delta Method calculation
+
+unknown distribution -> random number generation
+
+```{r}
+vec_xbar <- NULL
+vec_yn <- NULL
+
+delta <- function(n){
+  for (i in 1:n){
+    x = runif(1000)
+    xbar = mean(x)
+    vec_xbar = c(vec_xbar, xbar)
+    
+    yn = 1/xbar
+    vec_yn = c(vec_yn, yn)
+    
+    plot(xbar, yn)
+  }
+  final = as.data.frame(matrix(c(vec_xbar, vec_yn), nrow = 2, byrow = TRUE))
+  return(final)
+}
+
+```
+
+##3. T distribution versus Normal Distribution
+
+```{r}
+TvN <- function(n, df){
+  t = dt(0:n, df)
+  N = dnorm(0:n, mean = 0 , sd =1)
+  plot(0:n, t, col = "red")
+  lines(0:n, N, col = "blue")
+}
+```
+
+Testing the program out at n = 50 and df = 5 (randomly picked df)
+
+```{r}
+TvN(50, 5)
+```
+
+Now at n = 100
+```{r}
+TvN(100, 5)
+```
+
+Looking at both plots, it seems like both the T distribution and Normal distribution tend towards each other and can be said to be the same.
+
+##4 MSE of median
+
+```{r}
+x <- read.table("productsales.dat")
+x <- unlist(x)
+x <-as.numeric(x)
+
+x_len <- length(x)
+
+size <- 500
+
+sample1 <- sample(x, x_len*size, replace = TRUE)
+matrixform <- matrix(sample1, size, x_len)
+
+mean_matrix <- apply(matrixform, 1, mean)
+Mean <- mean(mean_matrix)
+Mean
+
+median_matrix <- apply(matrixform, 1, median)
+Median <- median(median_matrix)
+Median
+
+sd_matrix <- apply(matrixform, 1, sd)
+SD <- sd(sd_matrix)
+SD
+```
+
+MSE is the average of the squared of the errors, however, just taking from the Product Sales table does not provide us with a prediction and true value to compute the errors from. Thus, I am unsure how exactly to calculate this value. 
